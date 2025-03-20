@@ -66,14 +66,14 @@ namespace BulkEditor
             }, onlyScenesInBuild: false);
         }
         
-        [MenuItem( "Tools/Bulk Editing/Prefabs/Reimport All Prefabs" )]
+        [MenuItem("Tools/Bulk Editing/Prefabs/Reimport All Prefabs")]
         public static void ReimportAllPrefabs()
         {
-            BulkEditing.RunFunctionOnAllPrefabs( "Reimporting...", (path, prefab) =>
+            BulkEditing.RunFunctionOnAllPrefabs("Reimporting...", (path, prefab) =>
             {
-                AssetDatabase.ImportAsset( path, ImportAssetOptions.ForceUpdate );
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
                 return false;
-            } );
+            });
         }
 
         [MenuItem("Tools/Bulk Editing/Prefabs/Remove Missing Prefab Instances From Prefabs")]
@@ -133,6 +133,75 @@ namespace BulkEditor
 
                 return isDirty;
             }, onlyScenesInBuild: false);
+        }
+        
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Prefabs", isValidateFunction: false, priority: 100)]
+        public static void ReserializeAllPrefabs()
+        {
+            var assetPaths = AssetDatabase.FindAssets("t:prefab")
+                .Select(guid => AssetDatabase.GUIDToAssetPath(guid));
+
+            Debug.Log($"Reserializing {assetPaths.Count()} prefabs in project.");
+
+            AssetDatabase.ForceReserializeAssets(assetPaths);
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Prefabs", isValidateFunction: true, priority: 100)]
+        private static bool ReserializeAllPrefabsValidate()
+        {
+            return !Application.isPlaying;
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All ScriptableObjects", isValidateFunction: false, priority: 101)]
+        public static void ReserializeAllScriptableObjects()
+        {
+            var assetPaths = AssetDatabase.FindAssets("t:scriptableobject")
+                .Select(guid => AssetDatabase.GUIDToAssetPath(guid));
+
+            Debug.Log($"Reserializing {assetPaths.Count()} ScriptableObjects in project.");
+
+            AssetDatabase.ForceReserializeAssets(assetPaths);
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All ScriptableObjects", isValidateFunction: true, priority: 101)]
+        private static bool ReserializeAllScriptableObjectsValidate()
+        {
+            return !Application.isPlaying;
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Materials", isValidateFunction: false, priority: 101)]
+        public static void ReserializeAllMaterials()
+        {
+            var assetPaths = AssetDatabase.FindAssets("t:material")
+                .Select(guid => AssetDatabase.GUIDToAssetPath(guid));
+
+            Debug.Log($"Reserializing {assetPaths.Count()} Materials in project.");
+
+            AssetDatabase.ForceReserializeAssets(assetPaths);
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Materials", isValidateFunction: true, priority: 101)]
+        private static bool ReserializeAllMaterialsValidate()
+        {
+            return !Application.isPlaying;
+        }
+
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize Selected Assets", isValidateFunction: false, priority: 102)]
+        public static void ReserializeSelectedAssets()
+        {
+            var assetPaths = Selection.assetGUIDs.Select(guid => AssetDatabase.GUIDToAssetPath(guid));
+            var printStr = string.Join(",", Selection.assetGUIDs);
+
+            Debug.Log($"Reserializing {assetPaths.Count()} selected assets.");
+
+            AssetDatabase.ForceReserializeAssets(assetPaths);
+        }
+
+        [MenuItem("Tools/Bulk Editing/Serialization/Reserialize Selected Assets", isValidateFunction: true, priority: 102)]
+        private static bool ReserializeSelectedAssetsValidate()
+        {
+            return !Application.isPlaying && Selection.assetGUIDs.Length > 0;
         }
     }
 }

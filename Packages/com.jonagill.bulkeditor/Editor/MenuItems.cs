@@ -143,7 +143,9 @@ namespace BulkEditor
 
             Debug.Log($"Reserializing {assetPaths.Count()} prefabs in project.");
 
+            AssetDatabase.StartAssetEditing();
             AssetDatabase.ForceReserializeAssets(assetPaths);
+            AssetDatabase.StopAssetEditing();
         }
 
         [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Prefabs", isValidateFunction: true, priority: 100)]
@@ -160,7 +162,9 @@ namespace BulkEditor
 
             Debug.Log($"Reserializing {assetPaths.Count()} ScriptableObjects in project.");
 
+            AssetDatabase.StartAssetEditing();
             AssetDatabase.ForceReserializeAssets(assetPaths);
+            AssetDatabase.StopAssetEditing();
         }
 
         [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All ScriptableObjects", isValidateFunction: true, priority: 101)]
@@ -177,7 +181,9 @@ namespace BulkEditor
 
             Debug.Log($"Reserializing {assetPaths.Count()} Materials in project.");
 
+            AssetDatabase.StartAssetEditing();
             AssetDatabase.ForceReserializeAssets(assetPaths);
+            AssetDatabase.StopAssetEditing();
         }
 
         [MenuItem("Tools/Bulk Editing/Serialization/Reserialize All Materials", isValidateFunction: true, priority: 101)]
@@ -191,11 +197,12 @@ namespace BulkEditor
         public static void ReserializeSelectedAssets()
         {
             var assetPaths = Selection.assetGUIDs.Select(guid => AssetDatabase.GUIDToAssetPath(guid));
-            var printStr = string.Join(",", Selection.assetGUIDs);
 
             Debug.Log($"Reserializing {assetPaths.Count()} selected assets.");
 
+            AssetDatabase.StartAssetEditing();
             AssetDatabase.ForceReserializeAssets(assetPaths);
+            AssetDatabase.StopAssetEditing();
         }
 
         [MenuItem("Tools/Bulk Editing/Serialization/Reserialize Selected Assets", isValidateFunction: true, priority: 102)]

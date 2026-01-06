@@ -9,6 +9,10 @@ using UnityEngine.SceneManagement;
 using UnityEngine.Assertions;
 using UnityInternalAccess.Editor;
 
+#if UNITY_ADDRESSABLES
+using UnityEditor.AddressableAssets;
+#endif
+
 using Object = UnityEngine.Object;
 
 namespace BulkEditor
@@ -144,6 +148,7 @@ namespace BulkEditor
         {
             var currentScenePath = SceneManager.GetActiveScene().path;
             var scenePaths = new List<string>();
+            var editorSceneGuids = new List<string>();
 
             if (onlyScenesInBuild)
             {
@@ -151,13 +156,37 @@ namespace BulkEditor
                 for (int i = 0; i < sceneCount; i++)
                 {
                     var editorScene = EditorBuildSettings.scenes[i];
-                    scenePaths.Add(editorScene.path);
+                    editorSceneGuids.Add(AssetDatabase.AssetPathToGUID(editorScene.path));
                 }
             }
-            else
+            
+            bool ShouldIncludeScene(string sceneGuid, bool onlyScenesInBuild)
             {
-                var sceneGuids = AssetDatabase.FindAssets("t:scene");
-                for (int i = 0; i < sceneGuids.Length; i++)
+                // Include all scenes if we're not limiting to the build
+                if (!onlyScenesInBuild) return true;
+                
+                // This scene is included in our editor build settings
+                if (editorSceneGuids.Contains(sceneGuid)) return true;
+                
+#if UNITY_ADDRESSABLES
+                var addressableSettings = AddressableAssetSettingsDefaultObject.Settings;
+                if (addressableSettings != null)
+                {
+                    if (addressableSettings.FindAssetEntry(sceneGuid) != null)
+                    {
+                        // This is an Addressable scene and thus is considered included in the build as well
+                        return true;
+                    }
+                }
+#endif
+
+                return false;
+            }
+
+            var sceneGuids = AssetDatabase.FindAssets("t:scene");
+            for (int i = 0; i < sceneGuids.Length; i++)
+            {
+                if (ShouldIncludeScene(sceneGuids[i], onlyScenesInBuild))
                 {
                     scenePaths.Add(AssetDatabase.GUIDToAssetPath(sceneGuids[i]));
                 }
@@ -195,10 +224,9 @@ namespace BulkEditor
                     continue;
                 }
 
-                var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
-
                 try
                 {
+                    var scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
                     var isDirty = function();
 
                     if (isDirty)

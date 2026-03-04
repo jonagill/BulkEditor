@@ -2,7 +2,18 @@
 The Bulk Editor package provides access to a number of production-tested utilities for performing bulk asset editing across a Unity project via code. This can be very useful for updating, verifying, and maintaining large numbers of assets in larger projects.
 
 ## Installation
-Bulk Editor relies on my [Unity Internal Access](https://github.com/jonagill/UnityInternalAccess) library for certain functionality. We recommend you install both libraries via [OpenUPM](https://openupm.com/packages/com.jonagill.bulkeditor/). Per OpenUPM's documentation:
+Bulk Editor relies on my [Unity Internal Access](https://github.com/jonagill/UnityInternalAccess) library for certain functionality.
+
+### Install via Git
+1. Open Window/Package Manager
+2. Click the + button
+3. Select Add Package From Git URL
+4. Paste `https://github.com/jonagill/UnityInternalAccess.git?path=Packages/com.jonagill.unityinternalaccess` into the URL field
+5. Click Install
+6. Repeat, pasting `https://github.com/jonagill/BulkEditor.git?path=Packages/com.jonagill.bulkeditor` instead
+
+### Installation via OpenUPM
+To install  via [OpenUPM](https://openupm.com/packages/com.jonagill.autofill/):
 
 1. Open `Edit/Project Settings/Package Manager`
 2. Add a new Scoped Registry (or edit the existing OpenUPM entry) to read:

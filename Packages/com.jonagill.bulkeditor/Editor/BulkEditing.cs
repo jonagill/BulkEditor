@@ -247,7 +247,14 @@ namespace BulkEditor
             EditorUtility.ClearProgressBar();
 
             // Load our previous scene
-            EditorSceneManager.OpenScene(currentScenePath);
+            if (!string.IsNullOrEmpty(currentScenePath))
+            {
+                EditorSceneManager.OpenScene(currentScenePath);
+            }
+            else
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene);
+            }
         }
 
         /// <summary>

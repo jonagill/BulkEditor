@@ -27,10 +27,10 @@ namespace BulkEditor
             public Type componentType;
         }
 
-        private struct NestedPrefabToRemainLinked
+        private struct NestedPrefabInstances
         {
-            public Transform parent;
-            public Transform root;
+            public GameObject instance;
+            public GameObject prefab;
         }
 
         [SerializeField] private GameObject _sourcePrefab;
@@ -174,170 +174,200 @@ namespace BulkEditor
             {
                 return;
             }
-
-            var gameObjectsToRemove = new List<GameObjectToRemove>();
-            var componentsToRemove = new List<ComponentToRemove>();
-            var nestedPrefabsToRestore = new List<NestedPrefabToRemainLinked>();
-            var scratchTransforms = new List<Transform>();
-            var scratchFromComponents = new List<Component>();
-            var scratchToComponents = new List<Component>();
+            
+            // Group together all our changes
+            Undo.IncrementCurrentGroup();
+            int undoGroup = Undo.GetCurrentGroup();
 
             foreach (var targetObject in Selection.gameObjects)
             {
-                gameObjectsToRemove.Clear();
-                componentsToRemove.Clear();
-                nestedPrefabsToRestore.Clear();
+                ConvertObject(targetObject, _sourcePrefab);
+            }
+            
+            Undo.CollapseUndoOperations(undoGroup);
+            Undo.SetCurrentGroupName($"Convert to {_sourcePrefab.name}");
+        }
 
-                if (EditorUtility.IsPersistent(targetObject))
-                {
-                    Debug.LogWarning($"Cannot convert {targetObject} to prefab instance as it is a persistent asset.");
-                    continue;
-                }
+        private void ConvertObject(GameObject targetObject, GameObject sourcePrefab)
+        {
+            var gameObjectsToRemove = new List<GameObjectToRemove>();
+            var componentsToRemove = new List<ComponentToRemove>();
+            var nestedPrefabInstances = new List<NestedPrefabInstances>();
+            var scratchTransforms = new List<Transform>();
+            var scratchFromComponents = new List<Component>();
+            var scratchToComponents = new List<Component>();
+            
+            if (EditorUtility.IsPersistent(targetObject))
+            {
+                Debug.LogWarning($"Cannot convert {targetObject} to prefab instance as it is a persistent asset.");
+                return;
+            }
 
-                // Unpack the object's prefab instance so we can run the conversion
-                if (PrefabUtility.IsPartOfNonAssetPrefabInstance(targetObject))
-                {
-                    var root = PrefabUtility.GetOutermostPrefabInstanceRoot(targetObject);
-                    PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.UserAction);
-                }
+            if (PrefabUtility.IsPartOfPrefabInstance(targetObject) &&
+                !PrefabUtility.IsOutermostPrefabInstanceRoot(targetObject))
+            {
+                Debug.LogWarning($"Cannot convert {targetObject} as it is not at the root of its prefab.");
+                return;
+            }
+            
+            if (_nestedPrefabsNotMatchedRemainLinked &&
+                _settings.objectMatchMode == ObjectMatchMode.ByHierarchy &&
+                _settings.gameObjectsNotMatchedBecomesOverride)
+            {
+                targetObject.GetComponentsInChildren(true, scratchTransforms);
 
-                if (_missingGameObjectsBecomeOverride && _settings.objectMatchMode == ObjectMatchMode.ByHierarchy)
+                foreach (var transform in scratchTransforms)
                 {
-                    _sourcePrefab.GetComponentsInChildren(true, scratchTransforms);
-                    foreach (var sourceTransform in scratchTransforms)
+                    if (transform == targetObject.transform)
                     {
-                        if (!BulkEditing.TryGetMatchingGameObject(
-                                sourceTransform.gameObject,
-                                _sourcePrefab,
-                                targetObject,
-                                out _,
-                                out var missingObjectPath))
+                        continue;
+                    }
+
+                    if (PrefabUtility.IsAnyPrefabInstanceRoot(transform.gameObject) &&
+                        !BulkEditing.TryGetMatchingGameObject(
+                            transform.gameObject,
+                            targetObject,
+                            sourcePrefab,
+                            out _))
+                    {
+                        // There is no matching object in the prefab -- this will be unpacked entirely
+                        // Preserve its own prefab link for us to hook up again later
+                        
+                        var prefabPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(transform.gameObject);
+                        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                        
+                        nestedPrefabInstances.Add(new NestedPrefabInstances()
                         {
-                            gameObjectsToRemove.Add(new GameObjectToRemove()
-                            {
-                                hierarchyPath = missingObjectPath
-                            });
-                        }
+                            instance = transform.gameObject,
+                            prefab = prefab
+                        });
                     }
                 }
-
-                if (_missingComponentsBecomeOverride && _settings.objectMatchMode == ObjectMatchMode.ByHierarchy)
+            }
+            
+            // Unpack everything fully so we can run the conversion
+            // It would make things easier to only unpack the root, but that causes crashes when undoing
+            if (PrefabUtility.IsPartOfNonAssetPrefabInstance(targetObject))
+            {
+                var root = PrefabUtility.GetOutermostPrefabInstanceRoot(targetObject);
+                PrefabUtility.UnpackPrefabInstance(root, PrefabUnpackMode.Completely, InteractionMode.UserAction);
+            }
+            
+            if (_missingGameObjectsBecomeOverride && _settings.objectMatchMode == ObjectMatchMode.ByHierarchy)
+            {
+                sourcePrefab.GetComponentsInChildren(true, scratchTransforms);
+                foreach (var sourceTransform in scratchTransforms)
                 {
-                    targetObject.GetComponentsInChildren(true, scratchTransforms);
-                    foreach (var transform in scratchTransforms)
+                    if (!BulkEditing.TryGetMatchingGameObject(
+                            sourceTransform.gameObject,
+                            sourcePrefab,
+                            targetObject,
+                            out _,
+                            out var missingObjectPath))
                     {
-                        if (BulkEditing.TryGetMatchingGameObject(
-                                transform.gameObject,
-                                targetObject,
-                                _sourcePrefab,
-                                out var matchingTransformObject,
-                                out var matchingObjectPath))
+                        gameObjectsToRemove.Add(new GameObjectToRemove()
                         {
-                            transform.gameObject.GetComponents(scratchFromComponents);
-                            matchingTransformObject.GetComponents(scratchToComponents);
+                            hierarchyPath = missingObjectPath
+                        });
+                    }
+                }
+            }
 
-                            foreach (var component in scratchToComponents)
+            if (_missingComponentsBecomeOverride && _settings.objectMatchMode == ObjectMatchMode.ByHierarchy)
+            {
+                targetObject.GetComponentsInChildren(true, scratchTransforms);
+                foreach (var transform in scratchTransforms)
+                {
+                    if (BulkEditing.TryGetMatchingGameObject(
+                            transform.gameObject,
+                            targetObject,
+                            sourcePrefab,
+                            out var matchingTransformObject,
+                            out var matchingObjectPath))
+                    {
+                        transform.gameObject.GetComponents(scratchFromComponents);
+                        matchingTransformObject.GetComponents(scratchToComponents);
+
+                        foreach (var component in scratchToComponents)
+                        {
+                            var componentType = component.GetType();
+                            if (!scratchFromComponents.Any(c => c.GetType() == componentType))
                             {
-                                var componentType = component.GetType();
-                                if (!scratchFromComponents.Any(c => c.GetType() == componentType))
+                                // There is a component on the prefab that doesn't exist on the instance
+                                // Mark it for removal
+                                componentsToRemove.Add(new ComponentToRemove()
                                 {
-                                    // There is a component on the prefab that doesn't exist on the instance
-                                    // Mark it for removal
-                                    componentsToRemove.Add(new ComponentToRemove()
-                                    {
-                                        componentType = componentType,
-                                        hierarchyPath = matchingObjectPath
-                                    });
-                                }
-                                else if (scratchToComponents.Count(c => c.GetType() == componentType) !=
-                                          scratchFromComponents.Count(c => c.GetType() == componentType))
-                                {
-                                    Debug.LogWarning($"{targetObject}: Differing numbers of {componentType.Name} component found on object {matchingTransformObject.GetPathName()}. " +
-                                                      $"Cannot pend for automatic removal.");
-                                }
+                                    componentType = componentType,
+                                    hierarchyPath = matchingObjectPath
+                                });
+                            }
+                            else if (scratchToComponents.Count(c => c.GetType() == componentType) !=
+                                      scratchFromComponents.Count(c => c.GetType() == componentType))
+                            {
+                                Debug.LogWarning($"{targetObject}: Differing numbers of {componentType.Name} component found on object {matchingTransformObject.GetPathName()}. " +
+                                                  $"Cannot pend for automatic removal.");
                             }
                         }
                     }
                 }
+            }
 
-                if (_nestedPrefabsNotMatchedRemainLinked &&
-                     _settings.objectMatchMode == ObjectMatchMode.ByHierarchy &&
-                     _settings.gameObjectsNotMatchedBecomesOverride)
+            PrefabUtility.ConvertToPrefabInstance(
+                targetObject,
+                sourcePrefab,
+                _settings,
+                InteractionMode.UserAction);
+
+            foreach (var gameObjectToRemove in gameObjectsToRemove)
+            {
+                var transformToRemove = targetObject.transform.Find(gameObjectToRemove.hierarchyPath);
+                if (transformToRemove != null)
                 {
-                    targetObject.GetComponentsInChildren(true, scratchTransforms);
-
-                    foreach (var transform in scratchTransforms)
-                    {
-                        if (transform == targetObject.transform)
-                        {
-                            continue;
-                        }
-
-                        if (PrefabUtility.IsAnyPrefabInstanceRoot(transform.gameObject) &&
-                             !nestedPrefabsToRestore.Any(p => transform.IsChildOf(p.root.transform)) &&
-                             !BulkEditing.TryGetMatchingGameObject(
-                                 transform.gameObject,
-                                 targetObject,
-                                 _sourcePrefab,
-                                 out _))
-                        {
-                            // There is no matching object in the prefab -- we need to preserve this child prefab for later
-                            nestedPrefabsToRestore.Add(new NestedPrefabToRemainLinked()
-                            {
-                                parent = transform.parent,
-                                root = transform
-                            });
-
-                            // Unparent from our instance before converting, which would unlink the prefab
-                            transform.SetParent(null, false);
-                        }
-                    }
-                }
-
-                PrefabUtility.ConvertToPrefabInstance(
-                    targetObject,
-                    _sourcePrefab,
-                    _settings,
-                    InteractionMode.UserAction);
-
-                foreach (var gameObjectToRemove in gameObjectsToRemove)
-                {
-                    var transformToRemove = targetObject.transform.Find(gameObjectToRemove.hierarchyPath);
-                    if (transformToRemove != null)
-                    {
-                        DestroyImmediate(transformToRemove.gameObject);
-
-                        if (_settings.logInfo)
-                        {
-                            Debug.Log($"{targetObject}: Removed GameObject {gameObjectToRemove.hierarchyPath} that was not present on the original object. ", targetObject);
-                        }
-                    }
-
-                }
-
-                foreach (var componentToRemove in componentsToRemove)
-                {
-                    var gameObject = targetObject.transform.Find(componentToRemove.hierarchyPath);
-                    var component = gameObject.GetComponent(componentToRemove.componentType);
-                    if (component == null)
-                    {
-                        // Sometimes Unity will remove the unmatched components for us sometimes -- unclear what causes this,
-                        // but we don't want to throw an exception in any case
-                        continue;
-                    }
-
-                    DestroyImmediate(component);
+                    DestroyImmediate(transformToRemove.gameObject);
 
                     if (_settings.logInfo)
                     {
-                        Debug.Log($"{targetObject}: Removed {componentToRemove.componentType.Name} component that was not present on original object {gameObject}. ", gameObject);
+                        Debug.Log($"{targetObject}: Removed GameObject {gameObjectToRemove.hierarchyPath} that was not present on the original object. ", targetObject);
                     }
                 }
 
-                foreach (var prefabToRestore in nestedPrefabsToRestore)
+            }
+
+            foreach (var componentToRemove in componentsToRemove)
+            {
+                var gameObject = targetObject.transform.Find(componentToRemove.hierarchyPath);
+                var component = gameObject.GetComponent(componentToRemove.componentType);
+                if (component == null)
                 {
-                    prefabToRestore.root.SetParent(prefabToRestore.parent, false);
+                    // Sometimes Unity will remove the unmatched components for us sometimes -- unclear what causes this,
+                    // but we don't want to throw an exception in any case
+                    continue;
                 }
+
+                DestroyImmediate(component);
+
+                if (_settings.logInfo)
+                {
+                    Debug.Log($"{targetObject}: Removed {componentToRemove.componentType.Name} component that was not present on original object {gameObject}. ", gameObject);
+                }
+            }
+
+            foreach (var nestedInstance in nestedPrefabInstances)
+            {
+                if (nestedInstance.instance == null) 
+                {
+                    // Our instance was destroyed during conversion
+                    continue;
+                }
+
+                if (PrefabUtility.IsAnyPrefabInstanceRoot(nestedInstance.instance))
+                {
+                    // We remained hooked up successfully (or have already been hooked up again via a parent)
+                    continue;
+                }
+                
+                // Hook our prefab reference back up
+                ConvertObject(nestedInstance.instance, nestedInstance.prefab);
             }
         }
     }

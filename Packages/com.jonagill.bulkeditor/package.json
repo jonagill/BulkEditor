@@ -1,7 +1,7 @@
 {
   "name": "com.jonagill.bulkeditor",
   "description": "Editor helpers for bulk editing assets in a Unity project.",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "unity": "2023.1",
   "displayName": "Bulk Editor"
 }

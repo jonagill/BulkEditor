@@ -13,7 +13,7 @@ Bulk Editor relies on my [Unity Internal Access](https://github.com/jonagill/Uni
 6. Repeat, pasting `https://github.com/jonagill/BulkEditor.git?path=Packages/com.jonagill.bulkeditor` instead
 
 ### Installation via OpenUPM
-To install  via [OpenUPM](https://openupm.com/packages/com.jonagill.autofill/):
+To install  via [OpenUPM](https://openupm.com/packages/com.jonagill.bulkeditor/):
 
 1. Open `Edit/Project Settings/Package Manager`
 2. Add a new Scoped Registry (or edit the existing OpenUPM entry) to read:
